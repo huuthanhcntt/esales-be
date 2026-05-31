@@ -1,0 +1,45 @@
+### ===================================================================
+### Reservations Service - CRUD Operations
+### ===================================================================
+
+### 1. Create a reservation (requires auth + triggers payment + notification)
+# @name createReservation
+POST http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/reservations
+Content-Type: application/json
+Cookie: Authentication={{AUTH_TOKEN}}
+
+{
+  "startDate": "2025-01-15T00:00:00.000Z",
+  "endDate": "2025-01-20T00:00:00.000Z",
+  "charge": {
+    "card": {
+      "number": "4242424242424242",
+      "exp_month": 12,
+      "exp_year": 2030,
+      "cvc": "123"
+    },
+    "amount": 150
+  }
+}
+
+### 2. List all reservations (requires auth)
+GET http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/reservations
+Cookie: Authentication={{AUTH_TOKEN}}
+
+### 3. Get a reservation by ID (requires auth)
+GET http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/reservations/1
+Cookie: Authentication={{AUTH_TOKEN}}
+
+### 4. Update a reservation (requires auth)
+PATCH http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/reservations/1
+Content-Type: application/json
+Cookie: Authentication={{AUTH_TOKEN}}
+
+{
+  "startDate": "2025-02-01T00:00:00.000Z",
+  "endDate": "2025-02-07T00:00:00.000Z"
+}
+
+### 5. Delete a reservation (requires Admin role)
+DELETE http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/reservations/1
+Cookie: Authentication={{AUTH_TOKEN}}

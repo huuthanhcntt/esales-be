@@ -1,0 +1,336 @@
+# eSales Microservices - Docker Compose
+# Architecture: NestJS Microservices on PostgreSQL, Redis, Kafka, Elasticsearch, MinIO
+# Reference: NOVA_TechStack.pdf - Appendix 07
+
+name: esales
+#
+# Usage:
+#   Core services only:   docker compose up -d postgres reservations auth payments notifications
+#   Full infrastructure:  docker compose --profile infra --profile monitoring up -d
+
+services:
+  # ===========================================================================
+  # APPLICATION LAYER - NestJS Microservices
+  # ===========================================================================
+
+  reservations:
+    build:
+      context: .
+      dockerfile: ./apps/reservations/Dockerfile
+      target: development
+    command: sh -c "cd apps/reservations && pnpm prisma migrate deploy && pnpm prisma generate && cd ../.. && pnpm run start:dev reservations"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./apps/reservations/.env
+    ports:
+      - '4000:3000'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: .
+      dockerfile: ./apps/auth/Dockerfile
+      target: development
+    command: sh -c "cd apps/auth && pnpm prisma migrate deploy && pnpm prisma generate && cd ../.. && pnpm run start:dev auth"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./apps/auth/.env
+    ports:
+      - '4001:3001'
+      - '4002:3002'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  payments:
+    build:
+      context: .
+      dockerfile: ./apps/payments/Dockerfile
+      target: development
+    command: pnpm run start:dev payments
+    env_file:
+      - ./apps/payments/.env
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: .
+      dockerfile: ./apps/notifications/Dockerfile
+      target: development
+    command: pnpm run start:dev notifications
+    env_file:
+      - ./apps/notifications/.env
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # DATA LAYER - Database (required)
+  # ===========================================================================
+
+  postgres:
+    image: postgres:17
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # INFRASTRUCTURE - Optional (use --profile infra)
+  # ===========================================================================
+
+  redis:
+    image: redis:7.4
+    profiles: ["infra"]
+    ports:
+      - '6380:6379'
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    profiles: ["infra"]
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=esales-cluster
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.9.0
+    profiles: ["infra"]
+    ports:
+      - '2181:2181'
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok,srvr,stat"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.9.0
+    profiles: ["infra"]
+    ports:
+      - '9093:9093'
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    profiles: ["infra"]
+    ports:
+      - '8080:8080'
+    environment:
+      KAFKA_CLUSTERS_0_NAME: esales-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles: ["infra"]
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - esales-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:v1.24
+    profiles: ["infra"]
+    ports:
+      - '8025:8025'   # Web UI
+      - '1025:1025'   # SMTP
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # MONITORING - Optional (use --profile monitoring)
+  # ===========================================================================
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    profiles: ["monitoring"]
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    profiles: ["monitoring"]
+    ports:
+      - '3100:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.4.0
+    profiles: ["monitoring"]
+    ports:
+      - '3101:3100'
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+# ===========================================================================
+# NETWORKS
+# ===========================================================================
+
+networks:
+  esales-network:
+    driver: bridge
+    name: esales-network
+
+# ===========================================================================
+# VOLUMES - Persistent data storage
+# ===========================================================================
+
+volumes:
+  postgres-data:
+    name: esales-postgres-data
+  redis-data:
+    name: esales-redis-data
+  elasticsearch-data:
+    name: esales-elasticsearch-data
+  zookeeper-data:
+    name: esales-zookeeper-data
+  zookeeper-log:
+    name: esales-zookeeper-log
+  kafka-data:
+    name: esales-kafka-data
+  minio-data:
+    name: esales-minio-data
+  prometheus-data:
+    name: esales-prometheus-data
+  grafana-data:
+    name: esales-grafana-data
+  loki-data:
+    name: esales-loki-data

@@ -1,0 +1,46 @@
+### ===================================================================
+### Auth Service - Users & Authentication
+### ===================================================================
+
+### 1. Create a new user
+POST http://{{AUTH_HOST}}:{{AUTH_PORT}}/users
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "StrongPass123!"
+}
+
+### 2. Create an admin user
+POST http://{{AUTH_HOST}}:{{AUTH_PORT}}/users
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "AdminPass123!",
+  "roles": ["Admin"]
+}
+
+### 3. Login (returns JWT in Set-Cookie header)
+# @name login
+POST http://{{AUTH_HOST}}:{{AUTH_PORT}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "StrongPass123!"
+}
+
+### 4. Login as admin
+# @name loginAdmin
+POST http://{{AUTH_HOST}}:{{AUTH_PORT}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "AdminPass123!"
+}
+
+### 5. Get current user (requires auth)
+GET http://{{AUTH_HOST}}:{{AUTH_PORT}}/users
+Cookie: Authentication={{AUTH_TOKEN}}

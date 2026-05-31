@@ -1,0 +1,18 @@
+generator client {
+    provider = "prisma-client"
+    output = "../src/generated/prisma"
+    moduleFormat = "cjs"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model Reservation {
+    id Int @default(autoincrement()) @id
+    timestamp DateTime
+    startDate DateTime
+    endDate DateTime
+    userId Int
+    invoiceId String
+}

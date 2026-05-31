@@ -1,0 +1,9 @@
+### ===================================================================
+### Health Checks
+### ===================================================================
+
+### Health Check - Reservations Service
+GET http://{{RESERVATIONS_HOST}}:{{RESERVATIONS_PORT}}/
+
+### Health Check - Auth Service
+GET http://{{AUTH_HOST}}:{{AUTH_PORT}}/
