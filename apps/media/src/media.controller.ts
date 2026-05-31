@@ -29,13 +29,13 @@ export class MediaController {
     return this.mediaService.upload(file, uploadFileDto.folder);
   }
 
-  @Get(':key(*)')
+  @Get(':key')
   async getUrl(@Param('key') key: string) {
     const url = await this.mediaService.getSignedUrl(key);
     return { key, url };
   }
 
-  @Delete(':key(*)')
+  @Delete(':key')
   @UseGuards(JwtAuthGuard)
   async delete(@Param('key') key: string) {
     await this.mediaService.delete(key);

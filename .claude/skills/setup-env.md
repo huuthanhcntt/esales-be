@@ -45,42 +45,48 @@ If Docker is not running, tell the user to start Docker Desktop or Rancher Deskt
 ### Action 1: First-time setup
 
 ```bash
-# 1. Create env files from examples
-cp apps/reservations/.env.example apps/reservations/.env
-cp apps/auth/.env.example apps/auth/.env
-cp apps/payments/.env.example apps/payments/.env
-cp apps/notifications/.env.example apps/notifications/.env
-
-cp apps/reservations/.env.local.example apps/reservations/.env.local
-cp apps/auth/.env.local.example apps/auth/.env.local
-cp apps/payments/.env.local.example apps/payments/.env.local
-cp apps/notifications/.env.local.example apps/notifications/.env.local
+# 1. Create env files from examples (all 7 services)
+for svc in reservations auth payments notifications products orders media; do
+  cp apps/$svc/.env.example apps/$svc/.env 2>/dev/null || true
+  cp apps/$svc/.env.local.example apps/$svc/.env.local 2>/dev/null || true
+done
 
 # 2. Install dependencies
 pnpm install
 
-# 3. Start full infra
+# 3. Start infra only (postgres, redis, kafka, minio, mailpit)
 docker compose --profile infra up -d
 
 # 4. Wait for postgres
 until docker inspect --format='{{.State.Health.Status}}' esales-postgres-1 2>/dev/null | grep -q "healthy"; do sleep 3; done
 
-# 5. Run Prisma migrations
-dotenv -e apps/reservations/.env.local -- pnpm -w exec prisma migrate deploy --schema apps/reservations/prisma/schema.prisma
-dotenv -e apps/auth/.env.local -- pnpm -w exec prisma migrate deploy --schema apps/auth/prisma/schema.prisma
+# 5. Create databases for new services (if not exist)
+docker exec esales-postgres-1 psql -U postgres -c "CREATE DATABASE products;" 2>/dev/null || true
+docker exec esales-postgres-1 psql -U postgres -c "CREATE DATABASE orders;" 2>/dev/null || true
 
-# 6. Generate Prisma clients
-cd apps/reservations && dotenv -e .env.local -- pnpm prisma generate && cd ../..
-cd apps/auth && dotenv -e .env.local -- pnpm prisma generate && cd ../..
+# 6. Run Prisma migrations (all DB services)
+for svc in reservations auth products orders; do
+  cd apps/$svc && npx dotenv-cli -e .env.local -- pnpm prisma migrate deploy && cd ../..
+done
 
-# 7. Start all services locally
+# 7. Generate Prisma clients
+for svc in reservations auth products orders; do
+  cd apps/$svc && npx dotenv-cli -e .env.local -- pnpm prisma generate && cd ../..
+done
+
+# 8. Start all 7 services locally with hot-reload
 pnpm dev
 ```
 
 Wait for all services to show "Nest application successfully started", then verify:
 ```bash
-curl http://localhost:4000/health/live
-curl http://localhost:4001/health/live
+curl http://localhost:4000/health/live   # Reservations
+curl http://localhost:4001/health/live   # Auth
+curl http://localhost:3005/health/live   # Products
+curl http://localhost:3007/health/live   # Orders
+curl http://localhost:3009/health/live   # Media
+curl http://localhost:3013/health/live   # Payments
+curl http://localhost:3014/health/live   # Notifications
 ```
 
 ### Action 2: Start (local dev) — recommended
@@ -94,7 +100,7 @@ pkill -f 'nest start' || true
 # Start infra (postgres, kafka, redis, mailpit, elasticsearch, minio)
 docker compose --profile infra up -d
 
-# Start all 4 app services locally with hot-reload
+# Start all 7 app services locally with hot-reload
 pnpm dev
 ```
 
@@ -110,6 +116,9 @@ pnpm dev:auth
 pnpm dev:reservations
 pnpm dev:payments
 pnpm dev:notifications
+pnpm dev:products
+pnpm dev:orders
+pnpm dev:media
 ```
 
 ### Action 3: Start (Docker only)
@@ -166,11 +175,16 @@ pnpm dev
 docker compose --profile infra --profile monitoring ps
 
 # Check for local node processes on app ports
-lsof -i :4000 -i :4001 -i :3003 -i :3004 2>/dev/null | grep node || echo "No local services running"
+lsof -i :4000 -i :4001 -i :3005 -i :3007 -i :3009 -i :3013 -i :3014 2>/dev/null | grep node || echo "No local services running"
 
-# Health checks
+# Health checks (all 7 services)
 curl -s http://localhost:4000/health/live 2>/dev/null || echo "Reservations: not responding"
 curl -s http://localhost:4001/health/live 2>/dev/null || echo "Auth: not responding"
+curl -s http://localhost:3005/health/live 2>/dev/null || echo "Products: not responding"
+curl -s http://localhost:3007/health/live 2>/dev/null || echo "Orders: not responding"
+curl -s http://localhost:3009/health/live 2>/dev/null || echo "Media: not responding"
+curl -s http://localhost:3013/health/live 2>/dev/null || echo "Payments: not responding"
+curl -s http://localhost:3014/health/live 2>/dev/null || echo "Notifications: not responding"
 
 # Kafka consumer groups
 docker exec esales-kafka-1 kafka-consumer-groups --bootstrap-server kafka:9092 --list 2>/dev/null || echo "Kafka: not running"
@@ -210,12 +224,15 @@ docker compose logs --tail 20 reservations auth payments notifications 2>/dev/nu
 
 ### App Services (run locally via `pnpm dev`)
 
-| Service | Port | Swagger | Env File (local) |
-|---------|------|---------|-------------------|
-| Reservations | 4000 | http://localhost:4000/api/docs | `apps/reservations/.env.local` |
-| Auth | 4001 (HTTP), 3002 (TCP) | http://localhost:4001/api/docs | `apps/auth/.env.local` |
-| Payments | 3003 (TCP) | — | `apps/payments/.env.local` |
-| Notifications | 3004 (TCP) | — | `apps/notifications/.env.local` |
+| Service | HTTP Port | TCP Port | Swagger | Env File (local) |
+|---------|-----------|----------|---------|-------------------|
+| Reservations | 4000 | — | http://localhost:4000/api/docs | `apps/reservations/.env.local` |
+| Auth | 4001 | 3002 | http://localhost:4001/api/docs | `apps/auth/.env.local` |
+| Products | 3005 | 3006 | http://localhost:3005/api/docs | `apps/products/.env.local` |
+| Orders | 3007 | 3008 | http://localhost:3007/api/docs | `apps/orders/.env.local` |
+| Media | 3009 | 3010 | http://localhost:3009/api/docs | `apps/media/.env.local` |
+| Payments | 3013 | 3003 | http://localhost:3013/api/docs | `apps/payments/.env.local` |
+| Notifications | 3014 | 3004 | http://localhost:3014/api/docs | `apps/notifications/.env.local` |
 
 ### Infrastructure (Docker, `--profile infra`)
 

@@ -1,210 +1,106 @@
 # API Reference
 
-## Auth Service (host port 4001)
+All 7 services expose interactive Swagger UI at `/api/docs`. Use Swagger for full endpoint details, request/response schemas, and try-it-out.
 
-### Register User
+## Swagger URLs
 
-```http
-POST /users
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "StrongPass123!",
-  "roles": ["Admin"]          // optional
-}
-```
-
-**Response:** `201 Created`
-```json
-{
-  "id": 1,
-  "email": "user@example.com"
-}
-```
-
-### Login
-
-```http
-POST /auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "StrongPass123!"
-}
-```
-
-**Response:** `200 OK` + `Set-Cookie: Authentication=<jwt>; HttpOnly`
-
-### Get Current User
-
-```http
-GET /users
-Cookie: Authentication=<jwt>
-```
-
-**Response:** `200 OK`
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "roles": ["Admin"]
-}
-```
+| Service | URL | Description |
+|---------|-----|-------------|
+| Auth | http://localhost:4001/api/docs | User registration, login, JWT authentication |
+| Reservations | http://localhost:4000/api/docs | Reservation CRUD with payment integration |
+| Products | http://localhost:3005/api/docs | Product catalog, categories, search, WebSocket |
+| Orders | http://localhost:3007/api/docs | Order lifecycle, checkout, Stripe webhook |
+| Media | http://localhost:3009/api/docs | File upload/download via MinIO/S3 |
+| Payments | http://localhost:3013/api/docs | Stripe payment processing |
+| Notifications | http://localhost:3014/api/docs | Email notification delivery |
 
 ---
 
-## Reservations Service (host port 4000)
+## Service Overview
 
-All endpoints require JWT authentication via cookie.
+### Auth (:4001)
 
-### Create Reservation
+User management and JWT authentication. Issues HTTP-only cookies on login.
 
-```http
-POST /reservations
-Cookie: Authentication=<jwt>
-Content-Type: application/json
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/users` | No | Register user |
+| `POST` | `/auth/login` | No | Login (returns JWT cookie) |
+| `GET` | `/users` | JWT | Get current user profile |
 
-{
-  "startDate": "2024-02-01",
-  "endDate": "2024-02-05",
-  "charge": {
-    "amount": 100,
-    "card": {
-      "cvc": "413",
-      "exp_month": 12,
-      "exp_year": 2027,
-      "number": "4242424242424242"
-    }
-  }
-}
-```
+### Reservations (:4000)
 
-**Response:** `201 Created`
-```json
-{
-  "id": 1,
-  "startDate": "2024-02-01T00:00:00.000Z",
-  "endDate": "2024-02-05T00:00:00.000Z",
-  "userId": 1,
-  "invoiceId": "pi_3M...",
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
+Hotel/venue booking with integrated payment flow.
 
-### List All Reservations
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/reservations` | JWT | Create reservation + charge |
+| `GET` | `/reservations` | JWT | List all |
+| `GET/PATCH/DELETE` | `/reservations/:id` | JWT | Get/update/delete (delete = Admin) |
 
-```http
-GET /reservations
-Cookie: Authentication=<jwt>
-```
+### Products (:3005)
 
-### Get Single Reservation
+Product catalog management with categories and WebSocket updates.
 
-```http
-GET /reservations/:id
-Cookie: Authentication=<jwt>
-```
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/products` | JWT | Create product |
+| `GET` | `/products` | No | List (paginated, search, filter by category/status/price) |
+| `GET/PATCH/DELETE` | `/products/:id` | Mixed | Get (public), update/delete (owner or Admin) |
+| `POST` | `/products/categories` | Admin | Create category |
+| `GET` | `/products/categories` | No | List category tree |
 
-### Update Reservation
+### Orders (:3007)
 
-```http
-PATCH /reservations/:id
-Cookie: Authentication=<jwt>
-Content-Type: application/json
+Order lifecycle from creation through checkout to delivery.
 
-{
-  "startDate": "2024-03-01"
-}
-```
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/orders` | JWT | Create order (validates product stock) |
+| `GET` | `/orders` | JWT | List user's orders |
+| `POST` | `/orders/:id/checkout` | JWT | Initiate payment |
+| `PATCH` | `/orders/:id/cancel` | JWT | Cancel order |
+| `GET` | `/orders/admin` | Admin | List all orders |
+| `POST` | `/orders/webhook` | No | Stripe webhook |
 
-### Delete Reservation (Admin only)
+### Media (:3009)
 
-```http
-DELETE /reservations/:id
-Cookie: Authentication=<jwt>
-```
+File upload and object storage management via MinIO (dev) / S3 (prod).
 
-Requires `@Roles('Admin')` — returns `403 Forbidden` if the user does not have the `Admin` role.
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/media/upload` | JWT | Upload file (multipart/form-data) |
+| `GET` | `/media/:key` | No | Get signed download URL |
+| `DELETE` | `/media/:key` | JWT | Delete file |
 
 ---
 
-## Data Transfer Objects (DTOs)
+## Authentication
 
-### Common DTOs
+All protected endpoints accept JWT via:
+1. Cookie: `Authentication=<jwt>` (set by `POST /auth/login`)
+2. Header: `Authentication: <jwt>`
 
-```typescript
-// CardDto
-{
-  cvc:       string   // @IsString, @IsNotEmpty
-  exp_month: number   // @IsNumber
-  exp_year:  number   // @IsNumber
-  number:    string   // @IsCreditCard
-}
+### Role-Based Access
 
-// CreateChargeDto
-{
-  card:   CardDto     // @ValidateNested, @Type(() => CardDto)
-  amount: number      // @IsNumber
-}
+- `@Roles('Admin')` — coarse-grained role check
+- `@Permissions('module:action')` — fine-grained per-module access (e.g. `products:create`)
+- Admin role bypasses all permission checks
 
-// User (interface)
-{
-  id:       number
-  email:    string
-  password: string
-  roles:    string[]
-}
-```
+---
 
-### Auth DTOs
+## Inter-Service Communication (RPC)
 
-```typescript
-// CreateUserDto
-{
-  email:    string    // @IsEmail
-  password: string    // @IsStrongPassword
-  roles?:   string[]  // @IsOptional, @IsArray, @IsString({ each: true })
-}
+Services communicate via TCP (default) or Kafka (when `KAFKA_BROKER` is set).
 
-// GetUserDto
-{
-  id:       string    // @IsString, @IsNotEmpty
-}
-```
-
-### Reservations DTOs
-
-```typescript
-// CreateReservationDto
-{
-  startDate: Date             // @IsDate, @Type(() => Date)
-  endDate:   Date             // @IsDate, @Type(() => Date)
-  charge:    CreateChargeDto  // @ValidateNested, @Type(() => CreateChargeDto)
-}
-
-// UpdateReservationDto — PartialType(CreateReservationDto)
-// All fields optional
-```
-
-### Payments DTOs
-
-```typescript
-// PaymentsCreateChargeDto extends CreateChargeDto
-{
-  card:   CardDto   // inherited
-  amount: number    // inherited
-  email:  string    // @IsEmail (added)
-}
-```
-
-### Notifications DTOs
-
-```typescript
-// NotifyEmailDto
-{
-  email: string   // @IsEmail
-  text:  string   // @IsString
-}
-```
+| Pattern | Direction | Type | Purpose |
+|---------|-----------|------|---------|
+| `authenticate` | * -> Auth | Request/Response | JWT validation |
+| `create_charge` | * -> Payments | Request/Response | Process payment |
+| `notify_email` | * -> Notifications | Fire-and-forget | Send email |
+| `product.get` | Orders -> Products | Request/Response | Get product details |
+| `product.check_stock` | Orders -> Products | Request/Response | Verify availability |
+| `product.mark_sold` | Orders -> Products | Fire-and-forget | Mark product sold |
+| `media.upload` | * -> Media | Request/Response | Upload file via RPC |
+| `media.delete` | * -> Media | Request/Response | Delete file via RPC |
+| `media.get_url` | * -> Media | Request/Response | Get signed URL |

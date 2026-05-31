@@ -26,9 +26,12 @@ docker compose --profile infra --profile monitoring up -d
 |---|---|---|---|
 | `esales-postgres-1` | PostgreSQL 17 | `5433 → 5432` | Database with auto-created per-service schemas |
 | `esales-reservations-1` | Reservations API | `4000 → 3000` | HTTP REST API for reservations |
-| `esales-auth-1` | Auth Service | `4001 → 3001` (HTTP), `4002 → 3002` (TCP) | JWT auth + user management |
-| `esales-payments-1` | Payments Service | `3003` (TCP, internal only) | Stripe payment processing |
-| `esales-notifications-1` | Notifications Service | `3004` (TCP, internal only) | Email notifications via Gmail |
+| `esales-auth-1` | Auth Service | `4001 → 3001` (HTTP), `3002` (TCP) | JWT auth + user management |
+| `esales-products-1` | Products Service | `4005 → 3005` (HTTP), `3006` (TCP) | Product catalog + categories + WebSocket |
+| `esales-orders-1` | Orders Service | `4007 → 3007` (HTTP), `3008` (TCP) | Order lifecycle + checkout |
+| `esales-media-1` | Media Service | `4009 → 3009` (HTTP), `3010` (TCP) | File upload via MinIO/S3 |
+| `esales-payments-1` | Payments Service | `3013` (HTTP), `3003` (TCP) | Stripe payment processing |
+| `esales-notifications-1` | Notifications Service | `3014` (HTTP), `3004` (TCP) | Email notifications |
 
 All app services mount the project root as a volume for hot-reloading during development.
 
@@ -57,7 +60,7 @@ These services are **not wired into the application by default**. They activate 
 | **Mailpit** | `SMTP_HOST=mailpit` set on notifications | Notifications service sends emails via plain SMTP to Mailpit instead of Gmail OAuth. All emails are captured and viewable at http://localhost:8025. |
 | **Stripe Stub** | `STRIPE_STUB=true` set on payments | Payments service returns fake PaymentIntents without calling Stripe API. No `STRIPE_SECRET_KEY` needed. |
 | **Elasticsearch** | Not yet wired | Future: full-text search for reservations, audit log indexing. Will be integrated when search endpoints are added. |
-| **MinIO** | Not yet wired | Future: S3-compatible object storage for file attachments, media uploads, database backups. |
+| **MinIO** | `MINIO_ENDPOINT=minio` set on media | Media service uploads/downloads files from MinIO buckets. Console at http://localhost:9001. |
 
 ### Verifying Infrastructure Services
 
@@ -246,12 +249,12 @@ ENV NODE_ENV=production
 # Install pnpm@9.15.4, install prod deps only, copy dist from dev stage
 ```
 
-For services with Prisma (auth, reservations):
+For services with Prisma (auth, reservations, products, orders):
 ```bash
 CMD pnpm prisma migrate deploy && node dist/apps/<service>/main
 ```
 
-For services without Prisma (payments, notifications):
+For services without Prisma (payments, notifications, media):
 ```bash
 CMD ["node", "dist/apps/<service>/main"]
 ```
@@ -272,6 +275,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE DATABASE reservations;
     CREATE DATABASE payments;
     CREATE DATABASE notifications;
+    CREATE DATABASE products;
+    CREATE DATABASE orders;
 EOSQL
 ```
 
@@ -334,14 +339,17 @@ All services expose these endpoints for infrastructure tooling:
 | `GET /health/ready` | Readiness probe — returns 200 if service is ready | Kubernetes readiness probe |
 | `GET /health` | Backward-compatible health check | General monitoring |
 
-HTTP services also expose Swagger UI:
+All 7 services expose Swagger UI:
 
-| Service | Swagger URL | Description |
-|---|---|---|
-| Reservations | `http://localhost:4000/api/docs` | Reservation CRUD endpoints |
-| Auth | `http://localhost:4001/api/docs` | Login, user registration endpoints |
-
-> Payments and Notifications are TCP-only microservices — they expose `/metrics` and `/health` on HTTP ports 3013 and 3014 respectively, but have no user-facing API docs.
+| Service | Swagger URL |
+|---|---|
+| Auth | http://localhost:4001/api/docs |
+| Reservations | http://localhost:4000/api/docs |
+| Products | http://localhost:3005/api/docs |
+| Orders | http://localhost:3007/api/docs |
+| Media | http://localhost:3009/api/docs |
+| Payments | http://localhost:3013/api/docs |
+| Notifications | http://localhost:3014/api/docs |
 
 ---
 

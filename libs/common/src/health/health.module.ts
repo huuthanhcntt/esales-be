@@ -30,7 +30,8 @@ export class HealthModule {
       module: HealthModule,
       imports: [TerminusModule],
       controllers: [HealthController],
-      providers: [indicatorProvider],
+      providers: [prismaServiceClass, indicatorProvider],
+      exports: [prismaServiceClass],
     };
   }
 }
