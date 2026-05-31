@@ -12,6 +12,9 @@ export function createServiceClient(
   tcpPortEnv: string,
 ): ClientProvider {
   const kafkaBroker = configService.get<string>('KAFKA_BROKER');
+  // Each caller needs a unique consumer group for Kafka request-response,
+  // otherwise reply messages are consumed by only one service in the group.
+  const callerName = configService.get<string>('SERVICE_NAME') || `svc-${process.pid}`;
 
   if (kafkaBroker) {
     return {
@@ -22,7 +25,7 @@ export function createServiceClient(
           brokers: [kafkaBroker],
         },
         consumer: {
-          groupId: `${serviceName}-consumer`,
+          groupId: `${serviceName}-consumer-${callerName}`,
         },
       },
     } as any;

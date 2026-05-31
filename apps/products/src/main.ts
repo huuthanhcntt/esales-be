@@ -18,7 +18,10 @@ async function bootstrap() {
 
   app.use(cookieParser());
   app.use(helmet());
-  app.enableCors();
+  app.enableCors({
+    origin: configService.get('CORS_ORIGIN') || 'http://localhost:3000',
+    credentials: true,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useLogger(app.get(Logger));
 

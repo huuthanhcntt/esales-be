@@ -14,7 +14,11 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   app.use(cookieParser());
   app.use(helmet());
-  app.enableCors();
+  const configService = app.get(ConfigService);
+  app.enableCors({
+    origin: configService.get('CORS_ORIGIN') || 'http://localhost:3000',
+    credentials: true,
+  });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('eSales Reservations API')
@@ -27,8 +31,6 @@ async function bootstrap() {
     app,
     () => SwaggerModule.createDocument(app, swaggerConfig),
   );
-
-  const configService = app.get(ConfigService);
   await app.listen(configService.get('PORT'));
 }
 bootstrap();

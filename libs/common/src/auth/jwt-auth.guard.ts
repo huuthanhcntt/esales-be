@@ -84,7 +84,8 @@ export class JwtAuthGuard implements CanActivate, OnModuleInit {
         }),
         map(() => true),
         catchError((err) => {
-          this.logger.error(err);
+          this.logger.error(`JwtAuthGuard catchError: ${err?.message || err}`);
+          this.logger.error(JSON.stringify(err));
           return of(false);
         }),
       );

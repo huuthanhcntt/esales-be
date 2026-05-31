@@ -48,7 +48,7 @@ import { PrismaService } from './prisma.service';
     MetricsModule,
     RedisCacheModule,
   ],
-  controllers: [ProductsController, CategoriesController],
+  controllers: [CategoriesController, ProductsController],
   providers: [
     ProductsService,
     ProductsGateway,

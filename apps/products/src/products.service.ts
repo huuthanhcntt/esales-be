@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -14,13 +15,22 @@ export class ProductsService {
   constructor(private readonly prismaService: PrismaService) {}
 
   async create(createProductDto: CreateProductDto, user: User) {
-    return this.prismaService.product.create({
-      data: {
-        ...createProductDto,
-        userId: user.id,
-      },
-      include: { category: true, images: true },
-    });
+    try {
+      return await this.prismaService.product.create({
+        data: {
+          ...createProductDto,
+          userId: user.id,
+        },
+        include: { category: true, images: true },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        throw new ConflictException(
+          `A product with SKU "${createProductDto.sku}" already exists`,
+        );
+      }
+      throw error;
+    }
   }
 
   async findAll(query: QueryProductsDto): Promise<PaginatedResponse<any>> {

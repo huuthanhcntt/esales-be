@@ -1,6 +1,6 @@
-import { Controller, Post, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { ApiBody } from '@nestjs/swagger';
+import { ApiBody, ApiOkResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { User } from './generated/prisma/client';
 import { CurrentUser } from '@app/common';
@@ -24,12 +24,33 @@ export class AuthController {
       },
     },
   })
+  @ApiOkResponse({ description: 'Login successful, returns user and token' })
   async login(
     @CurrentUser() user: User,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const jwt = await this.authService.login(user, response);
-    response.send(jwt);
+    const token = await this.authService.login(user, response);
+    const { password: _, ...userWithoutPassword } = user as any;
+    return { user: userWithoutPassword, access_token: token };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiOkResponse({ description: 'Returns current authenticated user' })
+  async getMe(@CurrentUser() user: User) {
+    const { password: _, ...userWithoutPassword } = user as any;
+    return userWithoutPassword;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @ApiOkResponse({ description: 'Clears authentication cookie' })
+  async logout(@Res({ passthrough: true }) response: Response) {
+    response.cookie('Authentication', '', {
+      httpOnly: true,
+      expires: new Date(0),
+    });
+    return { message: 'Logged out successfully' };
   }
 
   @UseGuards(JwtAuthGuard)

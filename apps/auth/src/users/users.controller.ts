@@ -11,12 +11,15 @@ export class UsersController {
 
   @Post()
   async createUser(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+    const user = await this.usersService.create(createUserDto);
+    const { password: _, ...userWithoutPassword } = user as any;
+    return userWithoutPassword;
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
   async getUser(@CurrentUser() user: User) {
-    return user;
+    const { password: _, ...userWithoutPassword } = user as any;
+    return userWithoutPassword;
   }
 }
