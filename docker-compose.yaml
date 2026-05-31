@@ -80,6 +80,60 @@ services:
       - esales-network
     restart: unless-stopped
 
+  products:
+    build:
+      context: .
+      dockerfile: ./apps/products/Dockerfile
+      target: development
+    command: sh -c "cd apps/products && pnpm prisma migrate deploy && pnpm prisma generate && cd ../.. && pnpm run start:dev products"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./apps/products/.env
+    ports:
+      - '4005:3005'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  orders:
+    build:
+      context: .
+      dockerfile: ./apps/orders/Dockerfile
+      target: development
+    command: sh -c "cd apps/orders && pnpm prisma migrate deploy && pnpm prisma generate && cd ../.. && pnpm run start:dev orders"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./apps/orders/.env
+    ports:
+      - '4007:3007'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
+  media:
+    build:
+      context: .
+      dockerfile: ./apps/media/Dockerfile
+      target: development
+    command: pnpm run start:dev media
+    env_file:
+      - ./apps/media/.env
+    ports:
+      - '4009:3009'
+    volumes:
+      - .:/usr/src/app
+    networks:
+      - esales-network
+    restart: unless-stopped
+
   # ===========================================================================
   # DATA LAYER - Database (required)
   # ===========================================================================

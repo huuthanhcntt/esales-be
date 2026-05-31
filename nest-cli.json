@@ -47,6 +47,33 @@
       "compilerOptions": {
         "tsConfigPath": "apps/notifications/tsconfig.app.json"
       }
+    },
+    "products": {
+      "type": "application",
+      "root": "apps/products",
+      "entryFile": "main",
+      "sourceRoot": "apps/products/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/products/tsconfig.app.json"
+      }
+    },
+    "orders": {
+      "type": "application",
+      "root": "apps/orders",
+      "entryFile": "main",
+      "sourceRoot": "apps/orders/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/orders/tsconfig.app.json"
+      }
+    },
+    "media": {
+      "type": "application",
+      "root": "apps/media",
+      "entryFile": "main",
+      "sourceRoot": "apps/media/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/media/tsconfig.app.json"
+      }
     }
   },
   "compilerOptions": {

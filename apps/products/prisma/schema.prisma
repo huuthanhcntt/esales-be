@@ -1,0 +1,56 @@
+generator client {
+    provider     = "prisma-client"
+    output       = "../src/generated/prisma"
+    moduleFormat = "cjs"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model Product {
+    id          Int           @id @default(autoincrement())
+    name        String
+    description String
+    price       Float
+    currency    String        @default("VND")
+    sku         String?       @unique
+    categoryId  Int?
+    category    Category?     @relation(fields: [categoryId], references: [id])
+    status      ProductStatus @default(ACTIVE)
+    userId      Int
+    images      ProductImage[]
+    metadata    Json?
+    createdAt   DateTime      @default(now())
+    updatedAt   DateTime      @updatedAt
+    deletedAt   DateTime?
+}
+
+model Category {
+    id        Int        @id @default(autoincrement())
+    name      String     @unique
+    parentId  Int?
+    parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+    children  Category[] @relation("CategoryTree")
+    products  Product[]
+    createdAt DateTime   @default(now())
+    updatedAt DateTime   @updatedAt
+}
+
+model ProductImage {
+    id        Int      @id @default(autoincrement())
+    productId Int
+    product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+    url       String
+    key       String
+    isPrimary Boolean  @default(false)
+    sortOrder Int      @default(0)
+    createdAt DateTime @default(now())
+}
+
+enum ProductStatus {
+    DRAFT
+    ACTIVE
+    SOLD
+    ARCHIVED
+}
