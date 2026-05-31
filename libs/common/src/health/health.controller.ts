@@ -1,13 +1,20 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Inject, Optional } from '@nestjs/common';
 import {
   HealthCheck,
   HealthCheckService,
   HealthIndicatorResult,
 } from '@nestjs/terminus';
+import { HEALTH_INDICATORS } from './health.constants';
+import { HealthIndicatorFunction } from './health.interfaces';
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly health: HealthCheckService) {}
+  constructor(
+    private readonly health: HealthCheckService,
+    @Optional()
+    @Inject(HEALTH_INDICATORS)
+    private readonly indicators: HealthIndicatorFunction[],
+  ) {}
 
   @Get('live')
   @HealthCheck()
@@ -23,17 +30,16 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   ready() {
-    // Subclasses or dynamic indicators can be added per-service
-    // (e.g., DB connectivity). Base readiness = process is up.
-    return this.health.check([
+    const checks = [
       () =>
         Promise.resolve<HealthIndicatorResult>({
           process: { status: 'up' },
         }),
-    ]);
+      ...(this.indicators || []),
+    ];
+    return this.health.check(checks);
   }
 
-  // Keep backward compatibility with existing GET /
   @Get()
   @HealthCheck()
   root() {

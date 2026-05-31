@@ -1,7 +1,15 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import * as Joi from 'joi';
-import { HealthModule, LoggerModule, MetricsModule } from '@app/common';
+import {
+  AuditLogInterceptor,
+  HealthModule,
+  LoggerModule,
+  MetricsModule,
+  RedisCacheModule,
+} from '@app/common';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 
@@ -11,7 +19,6 @@ import { NotificationsService } from './notifications.service';
       isGlobal: true,
       validationSchema: Joi.object({
         PORT: Joi.number().required(),
-        // SMTP_HOST enables local mail (Mailpit). When set, Gmail OAuth is not needed.
         SMTP_HOST: Joi.string().optional(),
         SMTP_PORT: Joi.number().optional().default(1025),
         SMTP_USER: Joi.string().optional().default('noreply@esales.local'),
@@ -21,10 +28,18 @@ import { NotificationsService } from './notifications.service';
       }),
     }),
     LoggerModule,
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60000, limit: 100 }],
+    }),
     MetricsModule,
     HealthModule,
+    RedisCacheModule,
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService],
+  providers: [
+    NotificationsService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
+  ],
 })
 export class NotificationsModule {}

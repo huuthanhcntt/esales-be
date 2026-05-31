@@ -4,6 +4,7 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { StripeWebhookController } from './webhook/stripe-webhook.controller';
 import {
+  AuditLogInterceptor,
   LoggerModule,
   AUTH_SERVICE,
   PAYMENTS_SERVICE,
@@ -17,7 +18,7 @@ import {
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -83,7 +84,7 @@ import { PrismaService } from './prisma.service';
         inject: [ConfigService],
       },
     ]),
-    HealthModule,
+    HealthModule.forDatabase(PrismaService),
     MetricsModule,
     RedisCacheModule,
   ],
@@ -92,6 +93,7 @@ import { PrismaService } from './prisma.service';
     OrdersService,
     PrismaService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class OrdersModule {}

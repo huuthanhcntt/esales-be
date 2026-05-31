@@ -9,3 +9,4 @@ export * from './health';
 export * from './metrics';
 export * from './transport';
 export * from './cache';
+export * from './interceptors';

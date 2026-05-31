@@ -3,6 +3,7 @@ import * as Joi from 'joi';
 import { MediaService } from './media.service';
 import { MediaController } from './media.controller';
 import {
+  AuditLogInterceptor,
   LoggerModule,
   AUTH_SERVICE,
   HealthModule,
@@ -12,7 +13,7 @@ import {
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { APP_GUARD } from '@nestjs/core';
   providers: [
     MediaService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class MediaModule {}

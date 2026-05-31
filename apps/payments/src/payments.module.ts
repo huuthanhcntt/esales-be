@@ -1,16 +1,20 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as Joi from 'joi';
 import {
+  AuditLogInterceptor,
   HealthModule,
   LoggerModule,
   MetricsModule,
+  RedisCacheModule,
   NOTIFICATIONS_SERVICE,
   createServiceClient,
 } from '@app/common';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { ClientsModule } from '@nestjs/microservices';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -29,8 +33,12 @@ import { ClientsModule } from '@nestjs/microservices';
       }),
     }),
     LoggerModule,
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60000, limit: 100 }],
+    }),
     MetricsModule,
     HealthModule,
+    RedisCacheModule,
     ClientsModule.registerAsync([
       {
         name: NOTIFICATIONS_SERVICE,
@@ -46,6 +54,10 @@ import { ClientsModule } from '@nestjs/microservices';
     ]),
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService],
+  providers: [
+    PaymentsService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
+  ],
 })
 export class PaymentsModule {}

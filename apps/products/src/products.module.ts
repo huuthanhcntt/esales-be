@@ -6,6 +6,7 @@ import { ProductsGateway } from './products.gateway';
 import { CategoriesController } from './categories/categories.controller';
 import { CategoriesService } from './categories/categories.service';
 import {
+  AuditLogInterceptor,
   LoggerModule,
   AUTH_SERVICE,
   HealthModule,
@@ -16,7 +17,7 @@ import {
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule } from '@nestjs/microservices';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -43,7 +44,7 @@ import { PrismaService } from './prisma.service';
         inject: [ConfigService],
       },
     ]),
-    HealthModule,
+    HealthModule.forDatabase(PrismaService),
     MetricsModule,
     RedisCacheModule,
   ],
@@ -54,6 +55,7 @@ import { PrismaService } from './prisma.service';
     CategoriesService,
     PrismaService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class ProductsModule {}

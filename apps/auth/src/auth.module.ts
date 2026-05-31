@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import {
+  AuditLogInterceptor,
   HealthModule,
   LoggerModule,
   MetricsModule,
@@ -15,6 +16,7 @@ import { UsersModule } from './users/users.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LocalStategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { PrismaService } from './prisma.service';
 
 @Module({
   imports: [
@@ -42,16 +44,18 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       }),
       inject: [ConfigService],
     }),
-    HealthModule,
+    HealthModule.forDatabase(PrismaService),
     MetricsModule,
     RedisCacheModule,
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
+    PrismaService,
     LocalStategy,
     JwtStrategy,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AuthModule {}
